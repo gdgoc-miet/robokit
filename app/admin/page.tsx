@@ -38,7 +38,7 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-4">
-              You don't have permission to access the admin panel.
+              You don&apos;t have permission to access the admin panel.
             </p>
             <Button onClick={() => router.push("/")}>Go to Dashboard</Button>
           </CardContent>
@@ -439,15 +439,14 @@ function LevelEditor({ existingQuestion, onSave, onCancel }: LevelEditorProps) {
                     return (
                       <button
                         key={`${rowIndex}-${colIndex}`}
-                        className={`w-12 h-12 border border-border flex items-center justify-center text-xl transition-colors ${
-                          isWall
+                        className={`w-12 h-12 border border-border flex items-center justify-center text-xl transition-colors ${isWall
                             ? "bg-gray-700 dark:bg-gray-900 hover:bg-gray-600 dark:hover:bg-gray-800"
                             : isGoal
                               ? "bg-green-400 dark:bg-green-500 hover:bg-green-300 dark:hover:bg-green-400"
                               : isStart
                                 ? "bg-yellow-400 dark:bg-yellow-500 hover:bg-yellow-300 dark:hover:bg-yellow-400"
                                 : "bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600"
-                        }`}
+                          }`}
                         onMouseDown={() => handleMouseDown(rowIndex, colIndex)}
                         onMouseEnter={() =>
                           handleMouseEnter(rowIndex, colIndex)
@@ -584,15 +583,14 @@ function LevelManager({ questions, onEdit }: LevelManagerProps) {
                 return (
                   <div
                     key={`${rowIndex}-${colIndex}`}
-                    className={`w-6 h-6 flex items-center justify-center text-xs ${
-                      isWall
+                    className={`w-6 h-6 flex items-center justify-center text-xs ${isWall
                         ? "bg-gray-700 dark:bg-gray-900"
                         : isGoal
                           ? "bg-green-400 dark:bg-green-500"
                           : isStart
                             ? "bg-yellow-400 dark:bg-yellow-500"
                             : "bg-white dark:bg-gray-700"
-                    }`}
+                      }`}
                   >
                     {isStart && "→"}
                     {isGoal && "🎯"}
@@ -622,13 +620,12 @@ function LevelManager({ questions, onEdit }: LevelManagerProps) {
                   </p>
                   <div className="flex items-center gap-2 mt-2">
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        question.difficulty === "easy"
+                      className={`text-xs px-2 py-1 rounded-full ${question.difficulty === "easy"
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                           : question.difficulty === "medium"
                             ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
                             : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                      }`}
+                        }`}
                     >
                       {question.difficulty.toUpperCase()}
                     </span>

@@ -16,10 +16,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RobKit - GDGoC MIET",
+  title: "RoboKit - GDGoC MIET",
   description: "Pathfinder Robot Simulator for Google Developers Club on Campus",
   icons: {
-    icon: "/convex.svg",
+    icon: "/robokit.png",
   },
 };
 

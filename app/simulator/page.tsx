@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CodeEditor } from "@/components/CodeEditor";
 import { Simulator } from "@/components/Simulator";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
+import { GuidePanel } from "@/components/GuidePanel";
 import { useRouter } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import { Lightbulb, BookOpen, Users, Menu } from "lucide-react";
@@ -23,35 +23,17 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-const DEFAULT_CODE = `// Robot API:
-// move() - move forward one step
-// turn_left() - turn 90° left
-// turn_right() - turn 90° right
-// is_front_empty() - returns true if can move forward
-// is_left_empty() - returns true if left is empty
-// is_right_empty() - returns true if right is empty
-// is_goal() - returns true if at goal
-// get_position() - returns {x, y} current position
-// get_goal() - returns {x, y} goal position
-// log(msg) - print message to console
-// done() - stop execution
-
-// Memory API:
-// memory.has_visited(x, y) - check if cell was visited
-// memory.visit_count(x, y) - get visit count for cell
-// memory.get_visited_cells() - get all visited cells
-
-// Define start() - runs once at the beginning
+const DEFAULT_CODE = `// Define start() - runs once at the beginning
 function start() {
   log("Starting robot...");
 }
 
 // Define update() - runs every step until done() is called
 function update() {
-  if (is_front_empty()) {
+  if (is_empty()) {
     move();
   } else {
-    turn_right();
+    turn("right");
   }
   
   if (is_goal()) {
@@ -78,9 +60,16 @@ export default function SimulatorPage() {
   const updatePresence = useMutation(api.presence.updatePresence);
 
   const [code, setCode] = useState(DEFAULT_CODE);
-  const [lastSaved, setLastSaved] = useState<number>(Date.now());
+  const [lastSaved, setLastSaved] = useState<number>(0);
   const [showHint, setShowHint] = useState(false);
-  const [showSolution, setShowSolution] = useState(false);
+  const [now, setNow] = useState<number>(0);
+
+  useEffect(() => {
+    setLastSaved(Date.now());
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Update presence every 30 seconds
   useEffect(() => {
@@ -119,7 +108,6 @@ export default function SimulatorPage() {
       setCode(DEFAULT_CODE);
     }
     setShowHint(false);
-    setShowSolution(false);
   }, [teamState, selectedQuestionId]);
 
   // Auto-save every 2 seconds
@@ -160,10 +148,13 @@ export default function SimulatorPage() {
         )
       ) {
         setCode(selectedQuestion.solution);
-        setShowSolution(false);
       }
     }
   };
+
+  const map = useMemo(() => {
+    return selectedQuestion ? JSON.parse(selectedQuestion.initialMap) : [];
+  }, [selectedQuestion]);
 
   if (!questions || !selectedQuestion) {
     return (
@@ -175,8 +166,6 @@ export default function SimulatorPage() {
       </div>
     );
   }
-
-  const map = JSON.parse(selectedQuestion.initialMap);
 
   // Group questions by difficulty
   const easyQuestions = questions.filter((q) => q.difficulty === "easy");
@@ -282,7 +271,7 @@ export default function SimulatorPage() {
       </header>
 
       <main className="p-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[1600px] mx-auto">
           <Card className="mb-6 bg-card border shadow-md">
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
@@ -292,13 +281,12 @@ export default function SimulatorPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-sm font-normal px-3 py-1 rounded-full ${
-                      selectedQuestion.difficulty === "easy"
-                        ? "bg-[#34a853]/10 text-[#34a853]"
-                        : selectedQuestion.difficulty === "medium"
-                          ? "bg-[#fbbc04]/10 text-[#fbbc04]"
-                          : "bg-[#ea4335]/10 text-[#ea4335]"
-                    }`}
+                    className={`text-sm font-normal px-3 py-1 rounded-full ${selectedQuestion.difficulty === "easy"
+                      ? "bg-[#34a853]/10 text-[#34a853]"
+                      : selectedQuestion.difficulty === "medium"
+                        ? "bg-[#fbbc04]/10 text-[#fbbc04]"
+                        : "bg-[#ea4335]/10 text-[#ea4335]"
+                      }`}
                   >
                     {selectedQuestion.difficulty.toUpperCase()}
                   </span>
@@ -352,10 +340,10 @@ export default function SimulatorPage() {
                 <Users className="w-5 h-5 text-primary mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm text-foreground font-medium mb-1">
-                    You're not in a team yet
+                    You&apos;re not in a team yet
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    You can try the simulator, but your progress won't be saved.{" "}
+                    You can try the simulator, but your progress won&apos;t be saved.{" "}
                     <button
                       onClick={() => router.push("/teams")}
                       className="underline font-medium text-primary hover:text-destructive"
@@ -369,18 +357,18 @@ export default function SimulatorPage() {
             </motion.div>
           )}
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="shadow-lg">
+          <div className="grid gap-6 lg:grid-cols-[1fr_1fr_300px]">
+            <Card className="shadow-lg flex flex-col">
               <CardHeader>
                 <CardTitle className="flex justify-between items-center">
                   <span>Code Editor</span>
                   <span className="text-xs text-muted-foreground font-normal">
-                    Auto-saved {Math.floor((Date.now() - lastSaved) / 1000)}s
+                    Auto-saved {Math.floor((now - lastSaved) / 1000)}s
                     ago
                   </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 min-h-0">
                 <CodeEditor value={code} onChange={setCode} height="500px" />
               </CardContent>
             </Card>
@@ -398,6 +386,10 @@ export default function SimulatorPage() {
                 />
               </CardContent>
             </Card>
+
+            <div className="h-[600px] lg:h-auto">
+              <GuidePanel />
+            </div>
           </div>
         </div>
       </main>

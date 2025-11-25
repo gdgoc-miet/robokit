@@ -142,6 +142,7 @@ export const getTeamProgress = query({
 
     return {
       completedChallenges: completed.length,
+      completedQuestionIds: completed.map((s) => s.questionId),
       totalScore,
       totalAttempts: submissions.reduce((sum, s) => sum + (s.attempts || 0), 0),
     };

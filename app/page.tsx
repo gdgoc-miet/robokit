@@ -6,11 +6,12 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Code, Trophy, CheckCircle, Settings } from "lucide-react";
+import { Users, Code, Trophy, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/Logo";
+import { StatsCard } from "@/components/StatsCard";
 
 export default function Home() {
   const { isAuthenticated } = useConvexAuth();
@@ -81,14 +82,31 @@ function DashboardContent() {
   const myTeam = useQuery(api.teams.getMyTeam);
   const teamProgress = useQuery(api.questions.getTeamProgress);
   const isAdmin = useQuery(api.admin.amIAdmin);
+  const allQuestions = useQuery(api.questions.listQuestions);
+  const leaderboard = useQuery(api.questions.getLeaderboard);
 
-  if (myTeam === undefined) {
+  if (myTeam === undefined || allQuestions === undefined || leaderboard === undefined) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
+
+  // Calculate stats
+  const totalQuestions = allQuestions.length;
+  const completedCount = teamProgress?.completedChallenges || 0;
+
+  // Find next challenge
+  const completedIds = new Set(teamProgress?.completedQuestionIds || []);
+  const nextQuestion = allQuestions.find(q => !completedIds.has(q._id));
+
+  // Calculate rank
+  const myTeamRank = leaderboard.findIndex(t => t.teamId === myTeam?._id) + 1;
+  const rankDisplay = myTeam ? (myTeamRank > 0 ? `#${myTeamRank}` : "-") : "-";
+
+  // Top score
+  const topScore = leaderboard.length > 0 ? leaderboard[0].totalScore : 0;
 
   return (
     <div className="max-w-4xl mx-auto w-full">
@@ -114,33 +132,38 @@ function DashboardContent() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mb-8"
         >
-          <Card className="bg-card border shadow-md">
-            <CardHeader className="bg-gradient-to-r from-[#4285f4] to-[#34a853] text-white rounded-t-lg">
-              <CardTitle className="text-white">
+          <Card className="bg-card border shadow-md overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#4285f4] via-[#ea4335] to-[#34a853]" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xl font-bold text-foreground">
                 Your Team&apos;s Progress
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-[#4285f4]">
+            <CardContent>
+              <div className="grid grid-cols-3 gap-8 pt-4">
+                <div className="flex flex-col items-center p-4 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50 transition-colors">
+                  <span className="text-4xl font-extrabold text-[#4285f4] mb-1">
                     {teamProgress.completedChallenges}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Completed</div>
+                  </span>
+                  <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    Completed
+                  </span>
                 </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-[#ea4335]">
+                <div className="flex flex-col items-center p-4 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/50 transition-colors">
+                  <span className="text-4xl font-extrabold text-[#ea4335] mb-1">
                     {teamProgress.totalScore}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Total Score
-                  </div>
+                  </span>
+                  <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    Score
+                  </span>
                 </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-[#fbbc04]">
+                <div className="flex flex-col items-center p-4 rounded-xl bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-100 dark:border-yellow-900/50 transition-colors">
+                  <span className="text-4xl font-extrabold text-[#fbbc04] mb-1">
                     {teamProgress.totalAttempts}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Attempts</div>
+                  </span>
+                  <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    Attempts
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -154,36 +177,14 @@ function DashboardContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Card
-            className="cursor-pointer hover:shadow-lg transition-all duration-300 bg-card border shadow-md"
+          <StatsCard
+            title="Team Rank"
+            value={rankDisplay}
+            description={myTeam ? "Current position" : "Join a team"}
+            icon={Users}
+            color="text-[#4285f4]"
             onClick={() => router.push("/teams")}
-          >
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-6 h-6 text-[#4285f4]" />
-                <span className="text-foreground">Teams</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {myTeam ? (
-                <div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Team: {myTeam.name}
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <CheckCircle className="w-4 h-4 text-[#34a853]" />
-                    <span className="text-xs text-muted-foreground">
-                      {myTeam.members.length}/3 members
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Create or join a team
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          />
         </motion.div>
 
         <motion.div
@@ -191,22 +192,14 @@ function DashboardContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
-          <Card
-            className="cursor-pointer hover:shadow-lg transition-all duration-300 bg-card border shadow-md"
+          <StatsCard
+            title="Challenges"
+            value={`${completedCount} / ${totalQuestions}`}
+            description={nextQuestion ? `Next: ${nextQuestion.title}` : "All completed!"}
+            icon={Code}
+            color="text-[#ea4335]"
             onClick={() => router.push("/simulator")}
-          >
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Code className="w-6 h-6 text-[#ea4335]" />
-                <span className="text-foreground">Simulator</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Practice pathfinding algorithms
-              </p>
-            </CardContent>
-          </Card>
+          />
         </motion.div>
 
         <motion.div
@@ -214,22 +207,14 @@ function DashboardContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
         >
-          <Card
-            className="cursor-pointer hover:shadow-lg transition-all duration-300 bg-card border shadow-md"
+          <StatsCard
+            title="Top Score"
+            value={topScore}
+            description="Highest team score"
+            icon={Trophy}
+            color="text-[#fbbc04]"
             onClick={() => router.push("/leaderboard")}
-          >
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="w-6 h-6 text-[#fbbc04]" />
-                <span className="text-foreground">Leaderboard</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                View team rankings
-              </p>
-            </CardContent>
-          </Card>
+          />
         </motion.div>
 
         {isAdmin && (
@@ -237,6 +222,7 @@ function DashboardContent() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.5 }}
+            className="md:col-span-3"
           >
             <Card
               className="cursor-pointer hover:shadow-lg transition-all duration-300 bg-card border shadow-md border-[#34a853]"

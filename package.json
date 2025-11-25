@@ -7,7 +7,7 @@
     "dev:frontend": "next dev",
     "dev:backend": "convex dev",
     "predev": "convex dev --until-success && convex dev --once --run-sh \"node setup.mjs --once\" && convex dashboard",
-    "build": "next build",
+    "build": "npx convex deploy --cmd 'npm run build'",
     "start": "next start",
     "lint": "eslint . --ignore-pattern \"convex/_generated/**\""
   },
@@ -40,6 +40,7 @@
     "dotenv": "^17.2.3",
     "eslint": "^9.39.1",
     "eslint-config-next": "16.0.3",
+    "jose": "^6.1.2",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.17",

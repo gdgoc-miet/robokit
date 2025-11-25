@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
-import { Play, RotateCcw, SkipForward, Pause } from "lucide-react";
+import { Play, RotateCcw, SkipForward, Pause, ArrowUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Confetti from "react-confetti";
 
@@ -121,112 +121,118 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
     const dx = [0, 1, 0, -1];
     const dy = [-1, 0, 1, 0];
 
+    const getTargetPos = (
+      currentPos: { x: number; y: number },
+      currentDir: Direction,
+      relativeDir: "front" | "left" | "right" | "here" = "front",
+      steps: number = 1,
+    ) => {
+      if (relativeDir === "here") return { ...currentPos };
+
+      const dirs: Direction[] = ["N", "E", "S", "W"];
+      const currentDirIdx = dirs.indexOf(currentDir);
+      let targetDirIdx = currentDirIdx;
+
+      if (relativeDir === "left") {
+        targetDirIdx = (currentDirIdx + 3) % 4;
+      } else if (relativeDir === "right") {
+        targetDirIdx = (currentDirIdx + 1) % 4;
+      }
+
+      const targetDir = dirs[targetDirIdx];
+      const dirIdx = dirMap[targetDir];
+
+      return {
+        x: currentPos.x + dx[dirIdx] * steps,
+        y: currentPos.y + dy[dirIdx] * steps,
+      };
+    };
+
     const api = {
-      move: () => {
+      move: (count: number = 1) => {
         if (stepCount >= MAX_STEPS) {
           throw new Error("Maximum steps exceeded (1000)");
         }
-        const dirIdx = dirMap[dir];
-        const newX = pos.x + dx[dirIdx];
-        const newY = pos.y + dy[dirIdx];
 
-        if (
-          newY >= 0 &&
-          newY < mapCopy.length &&
-          newX >= 0 &&
-          newX < mapCopy[0].length &&
-          mapCopy[newY][newX] !== 1
-        ) {
-          pos = { x: newX, y: newY };
-          pathTrace.push({ x: pos.x, y: pos.y });
-          stepCount++;
+        // Handle optional argument being something else (like from a map callback)
+        const numSteps = typeof count === 'number' ? count : 1;
+
+        for (let i = 0; i < numSteps; i++) {
+          const dirIdx = dirMap[dir];
+          const newX = pos.x + dx[dirIdx];
+          const newY = pos.y + dy[dirIdx];
+
+          if (
+            newY >= 0 &&
+            newY < mapCopy.length &&
+            newX >= 0 &&
+            newX < mapCopy[0].length &&
+            mapCopy[newY][newX] !== 1
+          ) {
+            pos = { x: newX, y: newY };
+            pathTrace.push({ x: pos.x, y: pos.y });
+            stepCount++;
+            steps.push({
+              type: "move",
+              state: { x: pos.x, y: pos.y, dir },
+              message: `Moved to (${pos.x}, ${pos.y})`,
+            });
+            // Visit cell in memory
+            memory.visit(pos.x, pos.y);
+          } else {
+            steps.push({
+              type: "log",
+              state: { x: pos.x, y: pos.y, dir },
+              message: "⚠️ Cannot move - wall or out of bounds",
+            });
+            return false;
+          }
+        }
+        return true;
+      },
+      turn: (direction: "left" | "right") => {
+        if (stepCount >= MAX_STEPS) {
+          throw new Error("Maximum steps exceeded (1000)");
+        }
+        const dirs: Direction[] = ["N", "E", "S", "W"];
+        const idx = dirs.indexOf(dir);
+
+        if (direction === "left") {
+          dir = dirs[(idx + 3) % 4];
           steps.push({
-            type: "move",
+            type: "turn",
             state: { x: pos.x, y: pos.y, dir },
-            message: `Moved to (${pos.x}, ${pos.y})`,
+            message: `Turned left, now facing ${dir}`,
           });
-          return true;
+        } else if (direction === "right") {
+          dir = dirs[(idx + 1) % 4];
+          steps.push({
+            type: "turn",
+            state: { x: pos.x, y: pos.y, dir },
+            message: `Turned right, now facing ${dir}`,
+          });
         } else {
           steps.push({
             type: "log",
             state: { x: pos.x, y: pos.y, dir },
-            message: "⚠️ Cannot move - wall or out of bounds",
+            message: `⚠️ Invalid turn direction: ${direction}`,
           });
-          return false;
         }
-      },
-      turn_left: () => {
-        if (stepCount >= MAX_STEPS) {
-          throw new Error("Maximum steps exceeded (1000)");
-        }
-        const dirs: Direction[] = ["N", "E", "S", "W"];
-        const idx = dirs.indexOf(dir);
-        dir = dirs[(idx + 3) % 4];
         stepCount++;
-        steps.push({
-          type: "turn",
-          state: { x: pos.x, y: pos.y, dir },
-          message: `Turned left, now facing ${dir}`,
-        });
       },
-      turn_right: () => {
-        if (stepCount >= MAX_STEPS) {
-          throw new Error("Maximum steps exceeded (1000)");
-        }
-        const dirs: Direction[] = ["N", "E", "S", "W"];
-        const idx = dirs.indexOf(dir);
-        dir = dirs[(idx + 1) % 4];
-        stepCount++;
-        steps.push({
-          type: "turn",
-          state: { x: pos.x, y: pos.y, dir },
-          message: `Turned right, now facing ${dir}`,
-        });
-      },
-      is_front_empty: () => {
-        const dirIdx = dirMap[dir];
-        const newX = pos.x + dx[dirIdx];
-        const newY = pos.y + dy[dirIdx];
+      is_empty: (direction: "front" | "left" | "right" = "front") => {
+        const target = getTargetPos(pos, dir, direction);
         return (
-          newY >= 0 &&
-          newY < mapCopy.length &&
-          newX >= 0 &&
-          newX < mapCopy[0].length &&
-          mapCopy[newY][newX] !== 1
+          target.y >= 0 &&
+          target.y < mapCopy.length &&
+          target.x >= 0 &&
+          target.x < mapCopy[0].length &&
+          mapCopy[target.y][target.x] !== 1
         );
       },
-      is_goal: () => {
-        return pos.x === goal.x && pos.y === goal.y;
-      },
-      is_left_empty: () => {
-        const dirs: Direction[] = ["N", "E", "S", "W"];
-        const idx = dirs.indexOf(dir);
-        const leftDir = dirs[(idx + 3) % 4];
-        const leftDirIdx = dirMap[leftDir];
-        const newX = pos.x + dx[leftDirIdx];
-        const newY = pos.y + dy[leftDirIdx];
-        return (
-          newY >= 0 &&
-          newY < mapCopy.length &&
-          newX >= 0 &&
-          newX < mapCopy[0].length &&
-          mapCopy[newY][newX] !== 1
-        );
-      },
-      is_right_empty: () => {
-        const dirs: Direction[] = ["N", "E", "S", "W"];
-        const idx = dirs.indexOf(dir);
-        const rightDir = dirs[(idx + 1) % 4];
-        const rightDirIdx = dirMap[rightDir];
-        const newX = pos.x + dx[rightDirIdx];
-        const newY = pos.y + dy[rightDirIdx];
-        return (
-          newY >= 0 &&
-          newY < mapCopy.length &&
-          newX >= 0 &&
-          newX < mapCopy[0].length &&
-          mapCopy[newY][newX] !== 1
-        );
+      is_goal: (direction: "front" | "left" | "right" | "here" = "here") => {
+        const target = getTargetPos(pos, dir, direction);
+        return target.x === goal.x && target.y === goal.y;
       },
       get_position: () => {
         return { x: pos.x, y: pos.y };
@@ -252,11 +258,13 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
         const key = `${x},${y}`;
         visitedCells.set(key, (visitedCells.get(key) || 0) + 1);
       },
-      has_visited: (x: number, y: number) => {
-        return visitedCells.has(`${x},${y}`);
+      has_visited: (direction: "front" | "left" | "right" | "here" = "here") => {
+        const target = getTargetPos(pos, dir, direction);
+        return visitedCells.has(`${target.x},${target.y}`);
       },
-      visit_count: (x: number, y: number) => {
-        return visitedCells.get(`${x},${y}`) || 0;
+      visit_count: (direction: "front" | "left" | "right" | "here" = "here") => {
+        const target = getTargetPos(pos, dir, direction);
+        return visitedCells.get(`${target.x},${target.y}`) || 0;
       },
       get_visited_cells: () => {
         const cells: Array<{ x: number; y: number; count: number }> = [];
@@ -266,16 +274,6 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
         });
         return cells;
       },
-    };
-
-    // Auto-track visits on move
-    const originalMove = api.move;
-    api.move = () => {
-      const result = originalMove();
-      if (result) {
-        memory.visit(pos.x, pos.y);
-      }
-      return result;
     };
 
     // Create a context object to share state
@@ -291,11 +289,8 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
       // Execute user code with start/update pattern
       const userFunc = new Function(
         "move",
-        "turn_left",
-        "turn_right",
-        "is_front_empty",
-        "is_left_empty",
-        "is_right_empty",
+        "turn",
+        "is_empty",
         "is_goal",
         "get_position",
         "get_goal",
@@ -329,11 +324,8 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
 
       await userFunc(
         api.move,
-        api.turn_left,
-        api.turn_right,
-        api.is_front_empty,
-        api.is_left_empty,
-        api.is_right_empty,
+        api.turn,
+        api.is_empty,
         api.is_goal,
         api.get_position,
         api.get_goal,
@@ -364,6 +356,9 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
       setTotalSteps(stepCount);
 
       // Now play the steps
+      const playedPath = [{ x: startX, y: startY }];
+      setPath([...playedPath]);
+
       for (
         let i = 0;
         i < steps.length && !executionRef.current.cancelled;
@@ -373,11 +368,27 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
         const step = steps[i];
         setRobotPos({ x: step.state.x, y: step.state.y });
         setRobotDir(step.state.dir);
-        setPath(pathTrace.slice(0, i + 2));
         addLog(step.message);
 
-        // Wait for the speed delay
-        await new Promise((resolve) => setTimeout(resolve, speed[0]));
+        if (step.type === "move") {
+          // Wait for animation to partially complete before highlighting
+          const moveDuration = 200;
+          const stepDelay = speed[0];
+          const waitTime = Math.min(moveDuration, stepDelay);
+
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+          playedPath.push({ x: step.state.x, y: step.state.y });
+          setPath([...playedPath]);
+
+          const remaining = stepDelay - waitTime;
+          if (remaining > 0) {
+            await new Promise((resolve) => setTimeout(resolve, remaining));
+          }
+        } else {
+          // For turns or logs, just wait the full delay
+          await new Promise((resolve) => setTimeout(resolve, speed[0]));
+        }
 
         // Handle pause
         while (isPaused && !executionRef.current.cancelled) {
@@ -416,28 +427,26 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
 
   const getCellColor = (x: number, y: number) => {
     const cell = currentMap[y][x];
-    const isOnPath = path.some((p) => p.x === x && p.y === y);
+
+    // Calculate visit count from path
+    const visitCount = path.filter((p) => p.x === x && p.y === y).length;
+    const isOnPath = visitCount > 0;
 
     if (robotPos.x === x && robotPos.y === y)
       return "bg-yellow-400 dark:bg-yellow-500 shadow-lg";
     if (goal.x === x && goal.y === y) return "bg-green-400 dark:bg-green-500";
     if (cell === 1) return "bg-gray-800 dark:bg-gray-900";
-    if (isOnPath) return "bg-blue-100 dark:bg-blue-900/30";
+
+    if (isOnPath) {
+      // Heatmap logic
+      if (visitCount > 4) return "bg-red-400 dark:bg-red-600/80"; // High traffic/Loop
+      if (visitCount > 2) return "bg-blue-400 dark:bg-blue-600/60"; // Medium traffic
+      return "bg-blue-100 dark:bg-blue-900/30"; // Normal path
+    }
+
     return "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600";
   };
 
-  const getDirectionIcon = () => {
-    switch (robotDir) {
-      case "N":
-        return "↑";
-      case "E":
-        return "→";
-      case "S":
-        return "↓";
-      case "W":
-        return "←";
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -504,38 +513,54 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
         )}
       </div>
 
-      <div className="grid gap-0 w-fit mx-auto border-4 border-border rounded-lg overflow-hidden shadow-xl">
-        <AnimatePresence>
-          {currentMap.map((row, y) => (
-            <div key={y} className="flex">
-              {row.map((_, x) => (
-                <motion.div
-                  key={`${x}-${y}`}
-                  className={`w-12 h-12 flex items-center justify-center transition-all ${getCellColor(x, y)}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {robotPos.x === x && robotPos.y === y && (
-                    <motion.span
-                      className="text-3xl font-bold text-foreground"
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ type: "spring", stiffness: 200 }}
-                    >
-                      {getDirectionIcon()}
-                    </motion.span>
-                  )}
-                  {goal.x === x &&
-                    goal.y === y &&
-                    !(robotPos.x === x && robotPos.y === y) && (
-                      <span className="text-2xl">🎯</span>
-                    )}
-                </motion.div>
-              ))}
-            </div>
-          ))}
-        </AnimatePresence>
+      <div className="w-fit mx-auto">
+        <div className="relative grid gap-0 border-4 border-border rounded-lg overflow-hidden shadow-xl">
+          <AnimatePresence>
+            {currentMap.map((row, y) => (
+              <div key={y} className="flex">
+                {row.map((_, x) => (
+                  <motion.div
+                    key={`${x}-${y}`}
+                    className={`w-12 h-12 flex items-center justify-center transition-all ${getCellColor(x, y)}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {goal.x === x &&
+                      goal.y === y &&
+                      !(robotPos.x === x && robotPos.y === y) && (
+                        <span className="text-2xl">🎯</span>
+                      )}
+                  </motion.div>
+                ))}
+              </div>
+            ))}
+          </AnimatePresence>
+
+          {/* Robot Overlay */}
+          <motion.div
+            className="absolute top-0 left-0 w-12 h-12 flex items-center justify-center pointer-events-none z-10"
+            animate={{
+              x: robotPos.x * 48, // 48px is w-12 (3rem)
+              y: robotPos.y * 48,
+            }}
+            transition={{
+              duration: 0.2,
+            }}
+          >
+            <motion.div
+              animate={{
+                rotate: robotDir === "N" ? 0 :
+                  robotDir === "E" ? 90 :
+                    robotDir === "S" ? 180 : 270
+              }}
+              transition={{ duration: 0.2 }}
+              className="flex items-center justify-center"
+            >
+              <ArrowUp className="w-8 h-8 text-foreground" strokeWidth={3} />
+            </motion.div>
+          </motion.div>
+        </div>
       </div>
 
       <div className="bg-gray-900 dark:bg-gray-950 text-green-400 dark:text-green-300 p-4 rounded-lg h-48 overflow-y-auto font-mono text-sm border border-border">
