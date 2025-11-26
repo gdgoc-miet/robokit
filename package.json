@@ -7,7 +7,7 @@
     "dev:frontend": "next dev",
     "dev:backend": "convex dev",
     "predev": "convex dev --until-success && convex dev --once --run-sh \"node setup.mjs --once\" && convex dashboard",
-    "build": "npx convex deploy --cmd 'npm run next build'",
+    "build": "npx convex deploy --cmd 'next build'",
     "start": "next start",
     "lint": "eslint . --ignore-pattern \"convex/_generated/**\""
   },
