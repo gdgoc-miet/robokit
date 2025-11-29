@@ -117,8 +117,8 @@ function DashboardContent() {
   const myTeamRank = leaderboard.findIndex((t) => t.teamId === myTeam?._id) + 1;
   const rankDisplay = myTeam ? (myTeamRank > 0 ? `#${myTeamRank}` : "-") : "-";
 
-  // Top score
-  const topScore = leaderboard.length > 0 ? leaderboard[0].totalScore : 0;
+  // Top team's steps (lowest is best)
+  const topSteps = leaderboard.length > 0 ? leaderboard[0].totalSteps : 0;
 
   return (
     <div className="max-w-4xl mx-auto w-full">
@@ -163,10 +163,10 @@ function DashboardContent() {
                 </div>
                 <div className="flex flex-col items-center p-4 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/50 transition-colors">
                   <span className="text-4xl font-extrabold text-[#ea4335] mb-1">
-                    {teamProgress.totalScore}
+                    {teamProgress.totalSteps}
                   </span>
                   <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    Score
+                    Tiles
                   </span>
                 </div>
                 <div className="flex flex-col items-center p-4 rounded-xl bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-100 dark:border-yellow-900/50 transition-colors">
@@ -222,9 +222,9 @@ function DashboardContent() {
           transition={{ duration: 0.5, delay: 0.4 }}
         >
           <StatsCard
-            title="Top Score"
-            value={topScore}
-            description="Highest team score"
+            title="Fewest Tiles"
+            value={topSteps}
+            description="By leading team"
             icon={Trophy}
             color="text-[#fbbc04]"
             onClick={() => router.push("/leaderboard")}

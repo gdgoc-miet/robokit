@@ -155,7 +155,7 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
         }
 
         // Handle optional argument being something else (like from a map callback)
-        const numSteps = typeof count === 'number' ? count : 1;
+        const numSteps = typeof count === "number" ? count : 1;
 
         for (let i = 0; i < numSteps; i++) {
           const dirIdx = dirMap[dir];
@@ -218,7 +218,7 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
             message: `⚠️ Invalid turn direction: ${direction}`,
           });
         }
-        stepCount++;
+        // Don't increment stepCount for turns - only count tiles moved
       },
       is_empty: (direction: "front" | "left" | "right" = "front") => {
         const target = getTargetPos(pos, dir, direction);
@@ -258,11 +258,15 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
         const key = `${x},${y}`;
         visitedCells.set(key, (visitedCells.get(key) || 0) + 1);
       },
-      has_visited: (direction: "front" | "left" | "right" | "here" = "here") => {
+      has_visited: (
+        direction: "front" | "left" | "right" | "here" = "here",
+      ) => {
         const target = getTargetPos(pos, dir, direction);
         return visitedCells.has(`${target.x},${target.y}`);
       },
-      visit_count: (direction: "front" | "left" | "right" | "here" = "here") => {
+      visit_count: (
+        direction: "front" | "left" | "right" | "here" = "here",
+      ) => {
         const target = getTargetPos(pos, dir, direction);
         return visitedCells.get(`${target.x},${target.y}`) || 0;
       },
@@ -447,7 +451,6 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
     return "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600";
   };
 
-
   return (
     <div className="flex flex-col gap-4">
       {showConfetti && (
@@ -508,7 +511,7 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
 
         {totalSteps > 0 && (
           <div className="text-sm text-muted-foreground">
-            <strong>Steps taken:</strong> {totalSteps}
+            <strong>Tiles moved:</strong> {totalSteps}
           </div>
         )}
       </div>
@@ -550,9 +553,14 @@ export function Simulator({ map, goal, code, onComplete }: SimulatorProps) {
           >
             <motion.div
               animate={{
-                rotate: robotDir === "N" ? 0 :
-                  robotDir === "E" ? 90 :
-                    robotDir === "S" ? 180 : 270
+                rotate:
+                  robotDir === "N"
+                    ? 0
+                    : robotDir === "E"
+                      ? 90
+                      : robotDir === "S"
+                        ? 180
+                        : 270,
               }}
               transition={{ duration: 0.2 }}
               className="flex items-center justify-center"

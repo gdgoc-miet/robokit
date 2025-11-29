@@ -68,7 +68,7 @@ export default function LeaderboardPage() {
                       {leaderboard[1].teamName}
                     </div>
                     <div className="text-2xl font-bold mt-2 text-white">
-                      {leaderboard[1].totalScore}
+                      {leaderboard[1].totalSteps} tiles
                     </div>
                     <div className="text-xs text-white/90">
                       {leaderboard[1].completedChallenges} challenges
@@ -90,7 +90,7 @@ export default function LeaderboardPage() {
                       {leaderboard[0].teamName}
                     </div>
                     <div className="text-3xl font-bold mt-2 text-white">
-                      {leaderboard[0].totalScore}
+                      {leaderboard[0].totalSteps} tiles
                     </div>
                     <div className="text-xs text-white/90">
                       {leaderboard[0].completedChallenges} challenges
@@ -112,7 +112,7 @@ export default function LeaderboardPage() {
                       {leaderboard[2].teamName}
                     </div>
                     <div className="text-2xl font-bold mt-2 text-white">
-                      {leaderboard[2].totalScore}
+                      {leaderboard[2].totalSteps} tiles
                     </div>
                     <div className="text-xs text-white/90">
                       {leaderboard[2].completedChallenges} challenges
@@ -172,10 +172,10 @@ export default function LeaderboardPage() {
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-foreground">
-                          {team.totalScore}
+                          {team.totalSteps}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          points
+                          total tiles
                         </div>
                       </div>
                     </motion.div>
@@ -184,24 +184,27 @@ export default function LeaderboardPage() {
               </CardContent>
             </Card>
 
-            {/* Score breakdown */}
+            {/* Ranking explanation */}
             <Card>
               <CardHeader>
-                <CardTitle>How Scoring Works</CardTitle>
+                <CardTitle>How Ranking Works</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-foreground">
                 <p>
-                  <strong>Easy:</strong> 100 points base score
+                  <strong>Per Level:</strong> Teams are ranked by the number of
+                  tiles moved to complete each level.
                 </p>
                 <p>
-                  <strong>Medium:</strong> 200 points base score
+                  <strong>1st Place:</strong> Team with the fewest tiles moved
+                  on each level gets rank 1 for that level.
                 </p>
                 <p>
-                  <strong>Hard:</strong> 300 points base score
+                  <strong>Overall Ranking:</strong> Sum of ranks across all
+                  completed levels determines final position.
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  💡 Tip: Fewer steps = higher score! Each step reduces your
-                  score slightly.
+                  💡 Tip: Fewer tiles = better rank! Optimize your solutions to
+                  climb the leaderboard.
                 </p>
               </CardContent>
             </Card>

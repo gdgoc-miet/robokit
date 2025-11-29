@@ -147,16 +147,6 @@ export const submitAnswer = mutation({
                     q.eq('teamId', team._id).eq('questionId', args.questionId))
             .first();
 
-    const baseScore = question?.difficulty === 'easy' ? 100 :
-        question?.difficulty === 'medium'             ? 200 :
-                                                        300;
-
-    // Calculate score: base score - (steps penalty)
-    // Fewer steps = higher score
-    const stepPenalty = args.steps ? Math.floor(args.steps / 2) : 0;
-    const finalScore =
-        args.completed ? Math.max(baseScore - stepPenalty, baseScore / 2) : 0;
-
     if (existing) {
       // Increment attempts
       const newAttempts = (existing.attempts || 0) + 1;
@@ -164,8 +154,7 @@ export const submitAnswer = mutation({
       await ctx.db.patch(existing._id, {
         code: args.code,
         completed: args.completed || existing.completed,  // Don't un-complete
-        score: args.completed ? Math.max(finalScore, existing.score || 0) :
-                                existing.score,
+        // Keep the best (minimum) steps for completed challenges
         steps: args.completed && args.steps ?
             Math.min(args.steps, existing.steps || 999) :
             existing.steps,
@@ -180,7 +169,6 @@ export const submitAnswer = mutation({
         questionId: args.questionId,
         code: args.code,
         completed: args.completed,
-        score: finalScore,
         steps: args.steps,
         attempts: 1,
         completedAt: args.completed ? Date.now() : undefined,
@@ -189,7 +177,7 @@ export const submitAnswer = mutation({
   },
 });
 
-// Get leaderboard with team rankings
+// Get leaderboard with team rankings based on steps (fewer steps = better)
 export const getLeaderboard = query({
   args: {},
   handler: async (ctx) => {
@@ -197,32 +185,105 @@ export const getLeaderboard = query({
     const submissions = await ctx.db.query('submissions').collect();
     const questions = await ctx.db.query('questions').collect();
 
-    // Create a set of valid question IDs
-    const questionIds = new Set(questions.map(q => q._id));
+    // Create a map of valid question IDs to question data
+    const questionMap = new Map(questions.map(q => [q._id, q]));
 
-    const teamScores = teams.map((team) => {
-      // Only count submissions that are completed, not invalid, and for
-      // existing questions
+    // For each question, rank teams by steps (fewer steps = better rank)
+    // Build: questionId -> [{teamId, steps, rank}]
+    const questionRankings:
+        Map<string, Array<{teamId: string, steps: number, rank: number}>> =
+            new Map();
+
+    for (const question of questions) {
+      // Get all completed submissions for this question
+      const questionSubmissions = submissions.filter(
+          (s) => s.questionId === question._id && s.completed &&
+              s.reviewStatus !== 'invalid' && s.steps !== undefined);
+
+      // Sort by steps ascending (fewer steps = better)
+      questionSubmissions.sort((a, b) => (a.steps || 999) - (b.steps || 999));
+
+      // Assign ranks (handling ties - same steps = same rank)
+      const rankings: Array<{teamId: string, steps: number, rank: number}> = [];
+      let currentRank = 1;
+      let previousSteps = -1;
+
+      for (let i = 0; i < questionSubmissions.length; i++) {
+        const sub = questionSubmissions[i];
+        const steps = sub.steps || 999;
+
+        // If different from previous, update rank to current position
+        if (steps !== previousSteps) {
+          currentRank = i + 1;
+        }
+
+        rankings.push({teamId: sub.teamId as string, steps, rank: currentRank});
+        previousSteps = steps;
+      }
+
+      questionRankings.set(question._id as string, rankings);
+    }
+
+    // Calculate each team's total rank score and per-level details
+    const teamData = teams.map((team) => {
       const teamSubmissions = submissions.filter(
           (s) => s.teamId === team._id && s.completed &&
-              s.reviewStatus !== 'invalid' && questionIds.has(s.questionId));
-      const totalScore =
-          teamSubmissions.reduce((sum, s) => sum + (s.score || 0), 0);
-      const completedCount = teamSubmissions.length;
+              s.reviewStatus !== 'invalid' && questionMap.has(s.questionId));
+
+      // Get rank for each completed question
+      let totalRankScore = 0;
+      const levelDetails: Array<{
+        questionId: string,
+        questionTitle: string,
+        steps: number,
+        rank: number
+      }> = [];
+
+      for (const sub of teamSubmissions) {
+        const questionRanks = questionRankings.get(sub.questionId as string);
+        const teamRank = questionRanks?.find(r => r.teamId === team._id);
+        const question = questionMap.get(sub.questionId);
+
+        if (teamRank && question) {
+          totalRankScore += teamRank.rank;
+          levelDetails.push({
+            questionId: sub.questionId as string,
+            questionTitle: question.title,
+            steps: teamRank.steps,
+            rank: teamRank.rank
+          });
+        }
+      }
+
+      const totalSteps =
+          teamSubmissions.reduce((sum, s) => sum + (s.steps || 0), 0);
 
       return {
         teamId: team._id,
         teamName: team.name,
-        totalScore,
-        completedChallenges: completedCount,
-        submissions: teamSubmissions,
+        totalRankScore,  // Lower is better
+        totalSteps,
+        completedChallenges: teamSubmissions.length,
+        levelDetails,
       };
     });
 
-    // Sort by total score descending
-    teamScores.sort((a, b) => b.totalScore - a.totalScore);
+    // Sort by: 1) More completed challenges first, 2) Lower total rank score,
+    // 3) Fewer total steps as tiebreaker
+    teamData.sort((a, b) => {
+      // First by completed challenges (descending)
+      if (b.completedChallenges !== a.completedChallenges) {
+        return b.completedChallenges - a.completedChallenges;
+      }
+      // Then by total rank score (ascending - lower is better)
+      if (a.totalRankScore !== b.totalRankScore) {
+        return a.totalRankScore - b.totalRankScore;
+      }
+      // Tiebreaker: fewer total steps
+      return a.totalSteps - b.totalSteps;
+    });
 
-    return teamScores;
+    return teamData;
   },
 });
 
@@ -250,12 +311,12 @@ export const getTeamProgress = query({
     const completed = submissions.filter(
         (s) => s.completed && s.reviewStatus !== 'invalid' &&
             questionIds.has(s.questionId));
-    const totalScore = completed.reduce((sum, s) => sum + (s.score || 0), 0);
+    const totalSteps = completed.reduce((sum, s) => sum + (s.steps || 0), 0);
 
     return {
       completedChallenges: completed.length,
       completedQuestionIds: completed.map((s) => s.questionId),
-      totalScore,
+      totalSteps,
       totalAttempts: submissions.reduce((sum, s) => sum + (s.attempts || 0), 0),
     };
   },

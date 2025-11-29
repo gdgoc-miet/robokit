@@ -1124,8 +1124,7 @@ function SubmissionReviewer() {
                   </p>
                   <div className="text-sm text-muted-foreground space-y-1">
                     <p>
-                      Score: {submission.score || 0} | Steps:{" "}
-                      {submission.steps || "N/A"} | Attempts:{" "}
+                      Steps: {submission.steps || "N/A"} | Attempts:{" "}
                       {submission.attempts || 0}
                     </p>
                     <p>Submitted: {formatDate(submission.completedAt)}</p>
