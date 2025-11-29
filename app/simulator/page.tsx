@@ -11,7 +11,15 @@ import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { GuidePanel } from "@/components/GuidePanel";
 import { useRouter } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
-import { Lightbulb, BookOpen, Users, Menu } from "lucide-react";
+import {
+  Lightbulb,
+  BookOpen,
+  Users,
+  Menu,
+  AlertTriangle,
+  CheckCircle,
+  MessageSquare,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -52,6 +60,10 @@ export default function SimulatorPage() {
   const selectedQuestion = questions?.find((q) => q._id === selectedQuestionId);
   const teamState = useQuery(
     api.simulator.getState,
+    selectedQuestionId ? { questionId: selectedQuestionId } : "skip",
+  );
+  const submissionFeedback = useQuery(
+    api.questions.getSubmissionFeedback,
     selectedQuestionId ? { questionId: selectedQuestionId } : "skip",
   );
   const saveState = useMutation(api.simulator.saveState);
@@ -281,12 +293,13 @@ export default function SimulatorPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-sm font-normal px-3 py-1 rounded-full ${selectedQuestion.difficulty === "easy"
-                      ? "bg-[#34a853]/10 text-[#34a853]"
-                      : selectedQuestion.difficulty === "medium"
-                        ? "bg-[#fbbc04]/10 text-[#fbbc04]"
-                        : "bg-[#ea4335]/10 text-[#ea4335]"
-                      }`}
+                    className={`text-sm font-normal px-3 py-1 rounded-full ${
+                      selectedQuestion.difficulty === "easy"
+                        ? "bg-[#34a853]/10 text-[#34a853]"
+                        : selectedQuestion.difficulty === "medium"
+                          ? "bg-[#fbbc04]/10 text-[#fbbc04]"
+                          : "bg-[#ea4335]/10 text-[#ea4335]"
+                    }`}
                   >
                     {selectedQuestion.difficulty.toUpperCase()}
                   </span>
@@ -327,6 +340,67 @@ export default function SimulatorPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Admin Feedback Section */}
+              {submissionFeedback &&
+                (submissionFeedback.reviewStatus === "invalid" ||
+                  submissionFeedback.adminComment) && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className={`mt-4 p-4 rounded border-l-4 ${
+                      submissionFeedback.reviewStatus === "invalid"
+                        ? "bg-red-50 dark:bg-red-900/20 border-red-500"
+                        : submissionFeedback.reviewStatus === "approved"
+                          ? "bg-green-50 dark:bg-green-900/20 border-green-500"
+                          : "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {submissionFeedback.reviewStatus === "invalid" ? (
+                        <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      ) : submissionFeedback.reviewStatus === "approved" ? (
+                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        {submissionFeedback.reviewStatus === "invalid" && (
+                          <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">
+                            ⚠️ Submission Marked as Invalid
+                          </p>
+                        )}
+                        {submissionFeedback.reviewStatus === "approved" && (
+                          <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
+                            ✅ Submission Approved
+                          </p>
+                        )}
+                        {submissionFeedback.adminComment && (
+                          <p
+                            className={`text-sm ${
+                              submissionFeedback.reviewStatus === "invalid"
+                                ? "text-red-700 dark:text-red-300"
+                                : submissionFeedback.reviewStatus === "approved"
+                                  ? "text-green-700 dark:text-green-300"
+                                  : "text-blue-700 dark:text-blue-300"
+                            }`}
+                          >
+                            <strong>Admin Comment:</strong>{" "}
+                            {submissionFeedback.adminComment}
+                          </p>
+                        )}
+                        {submissionFeedback.reviewedAt && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Reviewed:{" "}
+                            {new Date(
+                              submissionFeedback.reviewedAt,
+                            ).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
             </CardContent>
           </Card>
 
@@ -343,7 +417,8 @@ export default function SimulatorPage() {
                     You&apos;re not in a team yet
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    You can try the simulator, but your progress won&apos;t be saved.{" "}
+                    You can try the simulator, but your progress won&apos;t be
+                    saved.{" "}
                     <button
                       onClick={() => router.push("/teams")}
                       className="underline font-medium text-primary hover:text-destructive"
@@ -363,8 +438,7 @@ export default function SimulatorPage() {
                 <CardTitle className="flex justify-between items-center">
                   <span>Code Editor</span>
                   <span className="text-xs text-muted-foreground font-normal">
-                    Auto-saved {Math.floor((now - lastSaved) / 1000)}s
-                    ago
+                    Auto-saved {Math.floor((now - lastSaved) / 1000)}s ago
                   </span>
                 </CardTitle>
               </CardHeader>

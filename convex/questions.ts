@@ -3,17 +3,105 @@ import {v} from 'convex/values';
 
 import {mutation, query} from './_generated/server';
 
+// Helper to check if a question is available based on competition settings
+function isQuestionAvailable(
+    question: {isPractice?: boolean; goLiveAt?: number},
+    settings: {isLive: boolean; allowPractice: boolean}|null,
+    now: number): boolean {
+  // If no settings, allow all questions (for backwards compatibility)
+  if (!settings) return true;
+
+  // Practice questions are available when practice is allowed
+  if (question.isPractice) {
+    return settings.allowPractice;
+  }
+
+  // Competition questions are only available when live
+  if (!settings.isLive) return false;
+
+  // Check if the question has a specific go-live time
+  if (question.goLiveAt && question.goLiveAt > now) {
+    return false;
+  }
+
+  return true;
+}
+
 export const listQuestions = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query('questions').collect();
+    const allQuestions = await ctx.db.query('questions').collect();
+    const settings = await ctx.db.query('competitionSettings').first();
+    const now = Date.now();
+
+    // Filter questions based on availability
+    const availableQuestions =
+        allQuestions.filter(q => isQuestionAvailable(q, settings, now));
+
+    // Sort by order if specified, then by difficulty
+    return availableQuestions.sort((a, b) => {
+      if (a.order !== undefined && b.order !== undefined) {
+        return a.order - b.order;
+      }
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+
+      const difficultyOrder = {easy: 0, medium: 1, hard: 2};
+      return difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty];
+    });
+  },
+});
+
+// Get competition settings (public)
+export const getCompetitionStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const settings = await ctx.db.query('competitionSettings').first();
+    const now = Date.now();
+
+    if (!settings) {
+      return {
+        isLive: false,
+        allowPractice: true,
+        title: 'RoboKit Competition',
+        description: 'Welcome to the competition!',
+        startsIn: null,
+        endsIn: null,
+      };
+    }
+
+    return {
+      isLive: settings.isLive,
+      allowPractice: settings.allowPractice,
+      title: settings.title || 'RoboKit Competition',
+      description: settings.description || 'Welcome to the competition!',
+      competitionStartTime: settings.competitionStartTime,
+      competitionEndTime: settings.competitionEndTime,
+      startsIn: settings.competitionStartTime && !settings.isLive ?
+          Math.max(0, settings.competitionStartTime - now) :
+          null,
+      endsIn: settings.competitionEndTime && settings.isLive ?
+          Math.max(0, settings.competitionEndTime - now) :
+          null,
+    };
   },
 });
 
 export const getQuestion = query({
   args: {id: v.id('questions')},
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const question = await ctx.db.get(args.id);
+    if (!question) return null;
+
+    const settings = await ctx.db.query('competitionSettings').first();
+    const now = Date.now();
+
+    // Check if this question is available
+    if (!isQuestionAvailable(question, settings, now)) {
+      return null;  // Don't expose questions that aren't available yet
+    }
+
+    return question;
   },
 });
 
@@ -27,6 +115,17 @@ export const submitAnswer = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error('Not authenticated');
+
+    // Check if question is available
+    const question = await ctx.db.get(args.questionId);
+    if (!question) throw new Error('Question not found');
+
+    const settings = await ctx.db.query('competitionSettings').first();
+    const now = Date.now();
+
+    if (!isQuestionAvailable(question, settings, now)) {
+      throw new Error('This question is not available yet');
+    }
 
     // Find user's team
     const teams = await ctx.db.query('teams').collect();
@@ -48,7 +147,6 @@ export const submitAnswer = mutation({
                     q.eq('teamId', team._id).eq('questionId', args.questionId))
             .first();
 
-    const question = await ctx.db.get(args.questionId);
     const baseScore = question?.difficulty === 'easy' ? 100 :
         question?.difficulty === 'medium'             ? 200 :
                                                         300;
@@ -97,10 +195,17 @@ export const getLeaderboard = query({
   handler: async (ctx) => {
     const teams = await ctx.db.query('teams').collect();
     const submissions = await ctx.db.query('submissions').collect();
+    const questions = await ctx.db.query('questions').collect();
+
+    // Create a set of valid question IDs
+    const questionIds = new Set(questions.map(q => q._id));
 
     const teamScores = teams.map((team) => {
-      const teamSubmissions =
-          submissions.filter((s) => s.teamId === team._id && s.completed);
+      // Only count submissions that are completed, not invalid, and for
+      // existing questions
+      const teamSubmissions = submissions.filter(
+          (s) => s.teamId === team._id && s.completed &&
+              s.reviewStatus !== 'invalid' && questionIds.has(s.questionId));
       const totalScore =
           teamSubmissions.reduce((sum, s) => sum + (s.score || 0), 0);
       const completedCount = teamSubmissions.length;
@@ -137,7 +242,14 @@ export const getTeamProgress = query({
             .withIndex('by_team', (q) => q.eq('teamId', team._id))
             .collect();
 
-    const completed = submissions.filter((s) => s.completed);
+    const questions = await ctx.db.query('questions').collect();
+    const questionIds = new Set(questions.map(q => q._id));
+
+    // Only count submissions that are completed, not invalid, and for existing
+    // questions
+    const completed = submissions.filter(
+        (s) => s.completed && s.reviewStatus !== 'invalid' &&
+            questionIds.has(s.questionId));
     const totalScore = completed.reduce((sum, s) => sum + (s.score || 0), 0);
 
     return {
@@ -145,6 +257,77 @@ export const getTeamProgress = query({
       completedQuestionIds: completed.map((s) => s.questionId),
       totalScore,
       totalAttempts: submissions.reduce((sum, s) => sum + (s.attempts || 0), 0),
+    };
+  },
+});
+
+// Get team's submissions with admin feedback
+export const getTeamSubmissionsWithFeedback = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+
+    const teams = await ctx.db.query('teams').collect();
+    const team = teams.find((t) => t.members.includes(userId));
+    if (!team) return null;
+
+    const submissions =
+        await ctx.db.query('submissions')
+            .withIndex('by_team', (q) => q.eq('teamId', team._id))
+            .collect();
+
+    const questions = await ctx.db.query('questions').collect();
+    const questionIds = new Set(questions.map(q => q._id));
+
+    // Filter out submissions for questions that no longer exist and enrich with
+    // question info
+    return submissions.filter(s => questionIds.has(s.questionId))
+        .map(submission => {
+          const question = questions.find(q => q._id === submission.questionId);
+          return {
+            _id: submission._id,
+            questionId: submission.questionId,
+            questionTitle: question?.title || 'Unknown Question',
+            questionDifficulty: question?.difficulty,
+            completed: submission.completed,
+            score: submission.score,
+            steps: submission.steps,
+            attempts: submission.attempts,
+            completedAt: submission.completedAt,
+            reviewStatus: submission.reviewStatus,
+            adminComment: submission.adminComment,
+            reviewedAt: submission.reviewedAt,
+          };
+        });
+  },
+});
+
+// Get submission feedback for a specific question
+export const getSubmissionFeedback = query({
+  args: {questionId: v.id('questions')},
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+
+    const teams = await ctx.db.query('teams').collect();
+    const team = teams.find((t) => t.members.includes(userId));
+    if (!team) return null;
+
+    const submission =
+        await ctx.db.query('submissions')
+            .withIndex(
+                'by_team_question',
+                (q) =>
+                    q.eq('teamId', team._id).eq('questionId', args.questionId))
+            .first();
+
+    if (!submission) return null;
+
+    return {
+      reviewStatus: submission.reviewStatus,
+      adminComment: submission.adminComment,
+      reviewedAt: submission.reviewedAt,
     };
   },
 });

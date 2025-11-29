@@ -6,7 +6,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Code, Trophy, Settings } from "lucide-react";
+import { Users, Code, Trophy, Settings, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -50,6 +50,14 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => router.push("/account")}
+            title="Account Settings"
+          >
+            <User className="w-4 h-4" />
+          </Button>
           <SignOutButton />
         </div>
       </header>
@@ -85,7 +93,11 @@ function DashboardContent() {
   const allQuestions = useQuery(api.questions.listQuestions);
   const leaderboard = useQuery(api.questions.getLeaderboard);
 
-  if (myTeam === undefined || allQuestions === undefined || leaderboard === undefined) {
+  if (
+    myTeam === undefined ||
+    allQuestions === undefined ||
+    leaderboard === undefined
+  ) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -99,10 +111,10 @@ function DashboardContent() {
 
   // Find next challenge
   const completedIds = new Set(teamProgress?.completedQuestionIds || []);
-  const nextQuestion = allQuestions.find(q => !completedIds.has(q._id));
+  const nextQuestion = allQuestions.find((q) => !completedIds.has(q._id));
 
   // Calculate rank
-  const myTeamRank = leaderboard.findIndex(t => t.teamId === myTeam?._id) + 1;
+  const myTeamRank = leaderboard.findIndex((t) => t.teamId === myTeam?._id) + 1;
   const rankDisplay = myTeam ? (myTeamRank > 0 ? `#${myTeamRank}` : "-") : "-";
 
   // Top score
@@ -195,7 +207,9 @@ function DashboardContent() {
           <StatsCard
             title="Challenges"
             value={`${completedCount} / ${totalQuestions}`}
-            description={nextQuestion ? `Next: ${nextQuestion.title}` : "All completed!"}
+            description={
+              nextQuestion ? `Next: ${nextQuestion.title}` : "All completed!"
+            }
             icon={Code}
             color="text-[#ea4335]"
             onClick={() => router.push("/simulator")}

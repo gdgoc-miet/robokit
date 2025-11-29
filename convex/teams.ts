@@ -141,3 +141,29 @@ export const getMyTeam = query({
     };
   },
 });
+
+// Rename team (leader only)
+export const renameTeam = mutation({
+  args: {name: v.string()},
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error('Not authenticated');
+
+    if (!args.name.trim()) throw new Error('Team name cannot be empty');
+
+    const teams = await ctx.db.query('teams').collect();
+    const myTeam = teams.find((t) => t.members.includes(userId));
+
+    if (!myTeam) throw new Error('You are not in a team');
+
+    if (myTeam.leaderId !== userId) {
+      throw new Error('Only the team leader can rename the team');
+    }
+
+    await ctx.db.patch(myTeam._id, {
+      name: args.name.trim(),
+    });
+
+    return {success: true};
+  },
+});
